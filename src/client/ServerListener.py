@@ -17,39 +17,6 @@ class ServerListener(QThread):
         self.socket = socket
         self.running = True
 
-    # def run(self):
-    #     # Main loop that listens for server messages
-    #
-    #     self.socket.settimeout(0.5)  # Set half a second of timeout
-    #     while self.running:
-    #         try:
-    #             # Assuming messages are JSON
-    #             data = self.socket.recv(1024).decode('utf-8')
-    #             if not data:
-    #                 continue
-    #
-    #             print(f"[DEBUG] ServerListener received: {data}")
-    #             if any(response in data for response in SERVER_RESPONSES):
-    #                 print(f"[DEBUG] ServerListener emitting auth response: {data}")
-    #                 self.auth_response.emit(data)
-    #                 continue
-    #
-    #             # Parse the received JSON data
-    #             messages = data.strip().split('\n')
-    #             for message in messages:
-    #                 try:
-    #                     update = json.loads(message)
-    #                     self.handle_server_update(update)
-    #                 except json.JSONDecodeError:
-    #                     print(f"[DEBUG] Could not parse as JSON: {data}")
-    #
-    #         except socket.timeout:
-    #             # Continue loop to check running flag
-    #             continue
-    #         except socket.error as e:
-    #             self.server_error.emit(f"[CLIENT/ServerListener] Connection error: {str(e)}")
-    #             break
-
     def run(self):
         self.socket.settimeout(0.5)
         while self.running:
