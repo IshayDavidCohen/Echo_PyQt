@@ -1,22 +1,27 @@
-import socket
 import sys
 import json
 from PyQt5 import uic, QtWidgets
 from PyQt5.QtWidgets import QMessageBox
 
 # App dependencies
-from src.client.ServerListener import ServerListener
 from src.client.CreateChannel import CreateChannelDialog
 from src.client.ChannelManager import ChannelManager, ChannelType
-from src.utility.Settings import ENCODING, USERNAMES
+from src.client.ClientConnection import ClientConnection
 
 
-class CredentialsWindow(QtWidgets.QMainWindow):
-    def __init__(self):
+class Client(QtWidgets.QMainWindow):
+    def __init__(self, port: int, host: str):
         super().__init__()
 
         # Load the UI file
         uic.loadUi('./src/ui/CredentialsWindow.ui', self)
+
+        # Initialize client connection
+        self.client = ClientConnection(host, port)
+
+        # Attach client signals
+        self.client.auth_response.connect(self._handle_auth_response)
+        self.client.server_error.connect(self._handle_error)
 
         # Connect buttons to their functions
         self.login_button.clicked.connect(self.login)
@@ -25,21 +30,21 @@ class CredentialsWindow(QtWidgets.QMainWindow):
         # Store main window ref
         self.main_window = None
 
+        self._establish_connection()
+
     def login(self):
         username = self.username_input.toPlainText()
         password = self.password_input.toPlainText()
 
-        try:
-            with open(USERNAMES, 'r') as file:
-                users = json.load(file)
+        if not username or not password:
+            QMessageBox.warning(self, 'Error', 'Please fill all fields!')
+            return
 
-            if username in users and users.get(username) == password:
-                self.open_main_window(username)
-            else:
-                QMessageBox.warning(self, 'Error', 'Invalid Credentials')
+        # Checking connection before login
+        self._check_connection()
 
-        except FileNotFoundError:
-            QMessageBox.warning(self, 'Error', 'No users registered yet!')
+        print("[DEBUG] Sending auth request...")  # Debug print
+        self.client.send_auth('signin', username, password)
 
     def signup(self):
         username = self.username_input.toPlainText()
@@ -49,30 +54,75 @@ class CredentialsWindow(QtWidgets.QMainWindow):
             QMessageBox.warning(self, 'Error', 'Please fill all fields!')
             return
 
-        try:
-            with open(USERNAMES, 'r') as file:
-                users = json.load(file)
-        except FileNotFoundError:
-            users = {}
-
-        if username in users:
-            QMessageBox.warning(self, 'Error', 'Username already exists!')
-            return
-
-        users[username] = password
-
-        with open(USERNAMES, 'w') as file:
-            json.dump(users, file)
-
-        QMessageBox.information(self, 'Success', 'Account created successfully!')
-
-        # TODO:  Probably should clear text boxes
+        # Checking connection before signup
+        self._check_connection()
+        self.client.send_auth('signup', username, password)
 
     def open_main_window(self, username):
         # Always create a fresh instance
         self.main_window = MainWindow(username, self)
         self.main_window.show()
         self.hide()
+
+    def closeEvent(self, event):
+        """Handle window close"""
+        self.client.disconnect()
+        event.accept()
+
+    # Private functions and signal handlers
+    def _handle_auth_response(self, response: str):
+        """Handle authentication responses from server"""
+
+        print(f"[DEBUG] Got auth response: {response}")  # Debug print
+
+        response = response.strip()
+
+        # Block signals to prevent multiple signals - Might need to check functionality, right now its commented out
+        # self.client.blockSignals(True)
+
+        try:
+            username = self.username_input.toPlainText()
+
+            if response == "SIGNIN_SUCCESS":
+                if self.main_window is None:
+                    self.open_main_window(username)
+                    self._clear_inputs()
+            elif response == "SIGNUP_SUCCESS":
+                QMessageBox.information(self, 'Success', 'Account created successfully!')
+                self._clear_inputs()
+            else:
+                error_messages = {
+                    "USER_EXISTS": "Username already exists!",
+                    "WRONG_PASSWORD": "Invalid credentials!",
+                    "INVALID_FORMAT": "Invalid username or password format!",
+                    "AUTH_ERROR": "Authentication error occurred!"
+                }
+                QMessageBox.warning(self, 'Error',
+                                    error_messages.get(response, "Unknown error occurred!"))
+        finally:
+            pass
+            # self.client.blockSignals(False)
+
+    def _handle_error(self, error: str):
+        """Handle server error messages"""
+        QMessageBox.critical(self, 'Server Error', error)
+        self.is_connected = False  # Mark connection as invalid
+
+    def _clear_inputs(self):
+        """Clear input fields"""
+        self.username_input.clear()
+        self.password_input.clear()
+
+    def _check_connection(self):
+        if self.client.is_connected is False:
+            QMessageBox.critical(self, 'Connection Error',
+                                 'Lost connection to server. Please restart the application.')
+            self.close()
+            sys.exit(1)
+
+    def _establish_connection(self):
+        self.client.connect()
+        self._check_connection()
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -84,15 +134,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Store credentials window ref
         self.credentials_window = credentials_window
+        self.username = username
+
+        # Get client connection from credentials window
+        self.client = credentials_window.client
+
+        # Connect client signals
+        self.client.channel_response.connect(self._handle_channel_update)
+        self.client.message_received.connect(self._handle_message)
+        self.client.server_error.connect(self._handle_error)
 
         # Init Channel Manager
         self.channel_manager = ChannelManager(self)
-
-        # Store username and initialize socket
-        self.username = username
-        self.socket = None
-        self.server_listener = None
-        self.current_channel = None
 
         # Set username in UI
         self.username_label.setText(f'Welcome,    {username}.')
@@ -103,130 +156,65 @@ class MainWindow(QtWidgets.QMainWindow):
         # Connect UI elements
         self.logout_button.clicked.connect(self.logout)
         self.create_channel_button.clicked.connect(self.create_channel)
-        # self.channel_list.itemDoubleClicked.connect(self.join_channel)
-        # self.send_message_button.clicked.connect(self.send_message)
-
-        # Connect to server
-        # self.connect_to_server()
-
-    def connect_to_server(self):
-        try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect(('localhost', 6000))  # TODO: Placeholder needs to be changed!
-
-            # Set up the listener
-            self.setup_server_listener()
-
-            self.authenticate()
-        except socket.error as e:
-            QMessageBox.critical(self, 'Connection Error', f'Failed to connect to server: {str(e)}')
-            self.close()
-            self.credentials_window.show()
-
-    def setup_server_listener(self):
-        self.server_listener = ServerListener(self.socket)
-
-        # Connect signals to slots
-        self.server_listener.channel_update.connect(self.handle_channel_update)
-        self.server_listener.message_received.connect(self.handle_message)
-        self.server_listener.server_error.connect(self.handle_server_error)
-
-        # Activate listener
-        self.server_listener.start()
-
-    def authenticate(self):
-        auth_message = f"signin {self.username} {self.credentials_window.password_input.toPlainText()}"
-        self.socket.sendall(auth_message.encode(ENCODING))
-
-        # Wait for response
-        response = self.socket.recv(1024).decode(ENCODING)
-
-        if response != "SIGNIN_SUCCESS":
-            QMessageBox.critical(self, 'Authentication Error', 'Failed to server authentication')
-            self.close()
-            self.credentials_window.show()
+        self.channel_list.itemDoubleClicked.connect(self.join_channel)
+        self.send_message_button.clicked.connect(self.send_message)
 
     def create_channel(self):
         dialog = CreateChannelDialog(self)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
+
             channel_name = dialog.channel_name.text()
-
             if channel_name:
-                try:
-                    self.socket.sendall(f"create {channel_name}".encode(ENCODING))
-                except (BrokenPipeError, AttributeError):
-                    QMessageBox.critical(self, 'Connection Error',
-                                         'Lost connection to server while trying to create channel')
-                    self.close()
-                    self.credentials_window.show()
+                self.client.create(channel_name)
 
-    # def join_channel(self):
-    #     channel_name = self.channel_list.selectedItems()[0].text()  # TODO: Need to implement only a single select
-    #     if not channel_name:
-    #         QMessageBox.warning(self, 'Error', 'Please enter a channel name!')
-    #         return
-    #     try:
-    #         self.socket.sendall(f"join {channel_name}".encode(ENCODING))
-    #     except (BrokenPipeError, AttributeError):
-    #         QMessageBox.critical(self, 'Connection Error', 'Lost connection to server while trying to join channel')
-    #         self.close()
-    #         self.credentials_window.show()
+    def join_channel(self, item):
+        channel_name = item.text()
+        self.client.join_channel(channel_name)
 
     def send_message(self):
-        if not self.current_channel:
+        if self.client.current_channel is None:
             QMessageBox.warning(self, 'Error', 'Please join a channel first!')
             return
 
         message = self.message_input.toPlainText()
         if message:
-            try:
-                self.socket.sendall(message.encode(ENCODING))
-            except (BrokenPipeError, AttributeError):
-                QMessageBox.critical(self, 'Connection Error', 'Lost connection to server while trying to send message')
-                self.close()
-                self.credentials_window.show()
-
+            self.client.send_message(message)
             self.message_input.clear()
 
-    def handle_channel_update(self, data):
-        try:
-            update = json.load(data)
-            action = update.get('action')
-            channel = update.get('channel')
-
-            try:
-                channel_action = ChannelType[action.upper()]
-                self.channel_manager.handle_action(action=channel_action, channel_name=channel, data=update.get('data'))
-            except KeyError:
-                print(f'[CLIENT] Unknown channel action: {action}')
-        except json.JSONDecodeError:
-            print(f'[CLIENT] Failed to parse channel update')
-
-    def join_channel(self, item):
-        channel_name = item.text()
-        self.channel_manager.handle_action(ChannelType.JOIN, channel_name)
-
     def logout(self):
+        # Disconnect ClientConnection
+        self.client.send_message('logout')
+
         # Clear all data
         self.close()
 
         # Show credentials window again
+        self.credentials_window.main_window = None
         self.credentials_window.show()
 
-    def retrieve_channel(self):
-        pass
+    def _handle_channel_update(self, data):
+        try:
+            update = json.loads(data)
+            action = update.get('action')
+            channel = update.get('channel')
+            self.channel_manager.handle_action(action=ChannelType[action.upper()],
+                                               channel_name=channel,
+                                               data=update.get('data'))
+        except Exception as e:
+            print(f"Error handling channel update: {e}")
 
-    def retrieve_channel_data(self, channel_name: str):
-        pass
+    def _handle_message(self, message: str):
+        self.chat_display.append(f"{message}")
 
-    # TODO: Need to implement update from server (channel was deleted, created, etc.)
+    def _handle_error(self, error: str):
+        QMessageBox.critical(self, 'Server Error', error)
 
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
 
     # Create and show credentials window
-    credentials_window = CredentialsWindow()
+    credentials_window = Client()
     credentials_window.show()
 
     sys.exit(app.exec_())

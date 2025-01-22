@@ -2,9 +2,12 @@ import socket
 import json
 from PyQt5.QtCore import QThread, pyqtSignal
 
+SERVER_RESPONSES = ['SIGNIN_SUCCESS', 'SIGNUP_SUCCESS', 'USER_EXISTS', 'WRONG_PASSWORD', 'WRONG_PASSWORD', 'NOT_IN_CHANNEL']
+
 
 class ServerListener(QThread):
     # Define different signals that will be used
+    auth_response = pyqtSignal(str)  # Auth responses
     channel_update = pyqtSignal(str)  # For channel-related updates
     message_received = pyqtSignal(str, str)  # (channel,message)
     server_error = pyqtSignal(str)  # For error messages
@@ -14,23 +17,71 @@ class ServerListener(QThread):
         self.socket = socket
         self.running = True
 
+    # def run(self):
+    #     # Main loop that listens for server messages
+    #
+    #     self.socket.settimeout(0.5)  # Set half a second of timeout
+    #     while self.running:
+    #         try:
+    #             # Assuming messages are JSON
+    #             data = self.socket.recv(1024).decode('utf-8')
+    #             if not data:
+    #                 continue
+    #
+    #             print(f"[DEBUG] ServerListener received: {data}")
+    #             if any(response in data for response in SERVER_RESPONSES):
+    #                 print(f"[DEBUG] ServerListener emitting auth response: {data}")
+    #                 self.auth_response.emit(data)
+    #                 continue
+    #
+    #             # Parse the received JSON data
+    #             messages = data.strip().split('\n')
+    #             for message in messages:
+    #                 try:
+    #                     update = json.loads(message)
+    #                     self.handle_server_update(update)
+    #                 except json.JSONDecodeError:
+    #                     print(f"[DEBUG] Could not parse as JSON: {data}")
+    #
+    #         except socket.timeout:
+    #             # Continue loop to check running flag
+    #             continue
+    #         except socket.error as e:
+    #             self.server_error.emit(f"[CLIENT/ServerListener] Connection error: {str(e)}")
+    #             break
+
     def run(self):
-        # Main loop that listens for server messages
+        self.socket.settimeout(0.5)
         while self.running:
             try:
-                # Assuming messages are JSON
                 data = self.socket.recv(1024).decode('utf-8')
                 if not data:
                     continue
 
-                # Parse the received JSON data
-                messages = data.strip().split('\n')
-                for message in messages:
-                    try:
-                        update = json.loads(message)
-                        self.handle_server_update(update)
-                    except json.JSONDecodeError:
-                        continue
+                data = data.strip()
+                print(f"[DEBUG] ServerListener received: {data}")
+
+                # Clean up the response - take only the first instance of a response
+                for response in ["SIGNIN_SUCCESS", "SIGNUP_SUCCESS", "USER_EXISTS",
+                                 "WRONG_PASSWORD", "NOT_IN_CHANNEL"]:
+                    if response in data:
+                        # Extract just the response code
+                        response_start = data.find(response)
+                        print(f"[DEBUG] Original response: {response}")
+                        clean_response = data[response_start:response_start + len(response)]
+                        print(f"[DEBUG] ServerListener emitting cleaned auth response: {clean_response}")
+                        self.auth_response.emit(clean_response)
+                        break  # Only emit the first match
+
+                # Try JSON for other messages
+                try:
+                    update = json.loads(data)
+                    self.handle_server_update(update)
+                except json.JSONDecodeError:
+                    print(f"[DEBUG] Could not parse as JSON: {data}")
+
+            except socket.timeout:
+                continue
             except socket.error as e:
                 self.server_error.emit(f"[CLIENT/ServerListener] Connection error: {str(e)}")
                 break
@@ -49,4 +100,3 @@ class ServerListener(QThread):
 
     def stop(self):
         self.running = False
-        self.wait()
