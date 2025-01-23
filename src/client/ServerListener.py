@@ -10,14 +10,15 @@ class ServerListener(QThread):
     auth_response = pyqtSignal(str)  # Auth responses
     metadata_response = pyqtSignal(dict)
     channel_update = pyqtSignal(str)  # For channel-related updates
-    message_received = pyqtSignal(str, str)  # (channel,message)
+    message_received = pyqtSignal(dict)  # (channel,message)
     server_error = pyqtSignal(str)  # For error messages
 
     def __init__(self, socket):
         super().__init__()
         self.socket = socket
         self.running = True
-        self.EMIT_MAPPER = {'get_users': self.metadata_response}
+        self.EMIT_MAPPER = {'get_users': self.metadata_response,
+                            'chat_message': self.message_received}
 
     def run(self):
         self.socket.settimeout(0.5)
@@ -31,8 +32,7 @@ class ServerListener(QThread):
                 print(f"[DEBUG] ServerListener received: {data}")
 
                 # Clean up the response - take only the first instance of a response
-                for response in ["SIGNIN_SUCCESS", "SIGNUP_SUCCESS", "USER_EXISTS",
-                                 "WRONG_PASSWORD", "NOT_IN_CHANNEL"]:
+                for response in SERVER_RESPONSES:
                     if response in data:
                         # Extract just the response code
                         response_start = data.find(response)
@@ -49,8 +49,6 @@ class ServerListener(QThread):
                     if update.get('action') in self.EMIT_MAPPER:
                         self.EMIT_MAPPER[update.get('action')].emit(update.get('data'))
 
-
-                    #self.handle_server_update(update)
                 except json.JSONDecodeError:
                     print(f"[DEBUG] Could not parse as JSON: {data}")
 
@@ -59,18 +57,6 @@ class ServerListener(QThread):
             except socket.error as e:
                 self.server_error.emit(f"[CLIENT/ServerListener] Connection error: {str(e)}")
                 break
-
-    def handle_server_update(self, update):
-        update_type = update.get('type')
-        if update_type == 'channel_update':
-            self.channel_update.emit(update.get('data'))
-
-        elif update_type == 'chat_message':
-            self.message_received.emit(
-                update.get('channel'),
-                update.get('message')
-            )
-        # Might need to add more
 
     def stop(self):
         self.running = False

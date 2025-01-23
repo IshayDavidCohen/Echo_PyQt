@@ -4,6 +4,7 @@ import socket
 import threading
 
 from typing import Dict, List, Optional
+from datetime import datetime
 
 # App Dependencies
 from src.utility.Settings import ENCODING, MAX_USERS_PER_CHANNEL, USERNAMES_FILE
@@ -18,12 +19,20 @@ class Server:
         self.socket.bind((host, port))
         self.auth = False
 
+        # Connection tracking
+        self.connections = {}  # username -> connection
+        self.chat_history = []  # List of messages
+
+        # Running flag
+        self.running = True
+
     def run(self):
         """Main server loop that handles initial connections"""
         self.socket.listen(5)
+        self.socket.settimeout(1)
         print(f"Server listening on {self.host}:{self.port}")
 
-        while True:
+        while self.running:
             try:
                 conn, addr = self.socket.accept()
                 print(f"New connection from {addr}")
@@ -35,9 +44,11 @@ class Server:
                 )
                 auth_thread.daemon = True
                 auth_thread.start()
-
+            except socket.timeout:
+                continue
             except Exception as e:
-                print(f"Error accepting connection: {e}")
+                if self.running:
+                    print(f"Error accepting connection: {e}")
 
     def handle_connection(self, conn, addr):
         """Handles the lifetime of a client connection"""
@@ -79,72 +90,88 @@ class Server:
         TODO: Maybe break to ENUM after project works, function too unreadable
         """
         current_channel = None
+        self.connections[username] = conn
 
-        while True:
-            try:
+        try:
+            while True:
                 data = conn.recv(1024).decode(ENCODING)
+
                 if not data:
                     break
 
+                # Reset action
+                action = None
+
                 print(f'[DEBUG] - [SERVER/HANDLE_CLIENT]: Received data: {data}')
 
-                command = data.split()
-                if not command:
-                    continue
+                # Determine if command or message (ideally solved by sending jsonified data)
+                # For time constraints will infer
 
-                action = command[0]
+                # Try to load as json, if error then string
+                try:
+                    data = json.loads(data)
+                except json.JSONDecodeError:
+                    command = data.split()
+                    if not command:
+                        continue
+                    action = command[0]
 
                 if action == 'logout':
                     # Clean logout - allows re-authentication
                     self.users.remove(username)
                     self.auth = False
                     self.send_message(conn, 'LOGOUT_SUCCESS')
-                    # TODO: Need to broadcast new users list to everyone
+                    self.broadcast_users_update()
                     break
+
                 elif action == 'get_users':
                     users = json.dumps({'action': action, 'data': {'users': self.users}})
                     self.send_message(conn, users)
 
-                else:  # Treat as message if in channel
-                    if current_channel:
-                        channel = self.channels[current_channel]
-                        channel.broadcast(data, username, self)
-                    else:
-                        self.send_message(conn, "NOT_IN_CHANNEL")
+                else:  # Treat as message
+                    self.broadcast_message(
+                        time=data.get('time'),
+                        sender=data.get('user'),
+                        message=data.get('message')
+                    )
 
+        except Exception as e:
+            print(f"Error handling client {username} at {addr}: {e}")
+        finally:
+            if username in self.connections:
+                del self.connections[username]
+            print(f"Client disconnected: {username} at {addr}")
+
+    def broadcast_users_update(self):
+        users = json.dumps({'action': 'get_users', 'data': {'users': self.users}})
+        for conn in self.connections.values():
+            try:
+                self.send_message(conn, users)
             except Exception as e:
-                print(f"Error handling client {username} at {addr}: {e}")
-                break
+                print(f"Failed to send users update: {e}")
 
-        # Cleanup on disconnect
-        if current_channel:
-            self.handle_leave_channel(current_channel, username)
-
-        print(f"Client disconnected: {username} at {addr}")
-
-    def broadcast_channel_update(self, action: str, channel_name: str):
-        # Needs to be reworked
-        update = {
-            "type": "channel_update",
-            "action": action,
-            "channel": channel_name
+    def broadcast_message(self, time: str, sender: str, message: str):
+        data = {
+            'sender': sender,
+            'message': message,
+            'time': time
         }
 
-        # Broadcast to all users in all channels
-        for channel in self.channels.values():
-            for user in channel.users:
+        formatted_msg = json.dumps({
+            'action': 'chat_message',
+            'data': data
+        })
+
+        # Store in chat history
+        self.chat_history.append(data)
+
+        # Broadcast to all users minus sender
+        for username, conn in self.connections.items():
+            if username != sender:
                 try:
-                    self.send_message(user['conn'], update)
+                    self.send_message(conn, formatted_msg)
                 except Exception as e:
-                    print(f"Failed to send update to {user['username']}: {e}")
-
-    def broadcast_message(self, message: str):
-        # Needs to be reworked
-        update = {
-            "type": "chat_message",
-            "message": message
-        }
-
+                    print(f"Failed to send message to {username}: {e}")
 
     def authenticate(self, conn, addr) -> Optional[Dict]:
         """Handle user authentication"""
@@ -165,6 +192,8 @@ class Server:
                 if username in users and users[username] == password:
                     self.send_message(conn, "SIGNIN_SUCCESS")
                     self.users.append(username)
+                    self.broadcast_users_update()
+
                     return {'auth_result': username, 'auth_message': 'SIGNIN_SUCCESS'}
 
                 # Failed to sign in
@@ -188,12 +217,27 @@ class Server:
             self.send_message(conn, "AUTH_ERROR")
             return None
 
-    def send_message(self, conn, message: str):
+    @staticmethod
+    def send_message(conn, message: str):
         """Send message to client with consistent encoding"""
         try:
             conn.send(message.encode(ENCODING))
         except Exception as e:
             print(f"Error sending message: {e}")
+
+    def shutdown(self):
+        print("Shutting down server...")
+        self.running = False
+
+        # Close all client connections
+        connections = list(self.connections.values())  # Copy to avoid runtime error
+        for conn in connections:
+            try:
+                conn.close()
+            except:
+                pass
+        self.connections.clear()
+        self.socket.close()
 
 
 if __name__ == "__main__":

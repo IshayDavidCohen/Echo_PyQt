@@ -10,7 +10,7 @@ class ClientConnection(QObject):
     # Define signals for UI updates
     auth_response = pyqtSignal(str)  # For authentication responses
     metadata_response = pyqtSignal(dict)  # For channel-related responses
-    message_received = pyqtSignal(str, str)  # channel, message
+    message_received = pyqtSignal(dict)  # channel, message
     server_error = pyqtSignal(str)  # For error messages
 
     def __init__(self, host: str, port: int):
@@ -86,13 +86,6 @@ class ClientConnection(QObject):
             self.socket.sendall(message.encode(ENCODING))
         except Exception as e:
             self.server_error.emit(f"Send failed: {str(e)}")
-
-    # Signal Handlers
-    # def _handle_metadata_update(self, data):
-    #     self.metadata_response.emit(data)
-
-    def _handle_message(self, channel, message):
-        self.message_received.emit(channel, message)
 
     def _handle_server_error(self, error):
         self.server_error.emit(error)

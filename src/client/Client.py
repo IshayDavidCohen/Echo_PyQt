@@ -3,6 +3,7 @@ import json
 from typing import List, Dict
 from PyQt5 import uic, QtWidgets
 from PyQt5.QtWidgets import QMessageBox
+from datetime import datetime
 
 # App dependencies
 from src.client.ChannelManager import ChannelType
@@ -141,8 +142,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Connect client signals
         self.client.metadata_response.connect(self.update_users_list)
-        # self.client.channel_response.connect(self._handle_channel_update)
-        self.client.message_received.connect(self._handle_message)
+        self.client.message_received.connect(self._handle_server_broadcast)
         self.client.server_error.connect(self._handle_error)
 
         # Set username in UI
@@ -153,18 +153,22 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Connect UI elements
         self.logout_button.clicked.connect(self.logout)
-        # self.create_channel_button.clicked.connect(self.create_channel)
-        # self.channel_list.itemDoubleClicked.connect(self.join_channel)
+        self.message_input.returnPressed.connect(self.send_message_button.click)
         self.send_message_button.clicked.connect(self.send_message)
 
     def send_message(self):
-        if self.client.current_channel is None:
-            QMessageBox.warning(self, 'Error', 'Please join a channel first!')
-            return
+        message_time = datetime.now().strftime("%H:%M:%S")
 
-        message = self.message_input.toPlainText()
+        message = self.message_input.text()
         if message:
-            self.client.send_message(message)
+            self._handle_message(message_time, self.username, message)
+
+            # Send to server
+            self.client.send_message(
+                json.dumps({'time': message_time,
+                            'user': self.username,
+                            'message': message}))
+
             self.message_input.clear()
 
     def update_users_list(self, users: Dict) -> None:
@@ -186,6 +190,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.credentials_window.main_window = None
         self.credentials_window.show()
 
+    def _handle_message(self, time: str, sender: str, message: str):
+        self.chat_display.append(f"[{time}] {sender}: {message}")
+
+    def _handle_server_broadcast(self, server_payload: Dict):
+        time = server_payload.get('time')
+        sender = server_payload.get('sender')
+        message = server_payload.get('message')
+        if time and sender and message:
+            self._handle_message(time, sender, message)
+
     def _handle_channel_update(self, data):
         try:
             update = json.loads(data)
@@ -196,9 +210,6 @@ class MainWindow(QtWidgets.QMainWindow):
                                                data=update.get('data'))
         except Exception as e:
             print(f"Error handling channel update: {e}")
-
-    def _handle_message(self, message: str):
-        self.chat_display.append(f"{message}")
 
     def _handle_error(self, error: str):
         QMessageBox.critical(self, 'Server Error', error)
