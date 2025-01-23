@@ -9,85 +9,14 @@ from typing import Dict, List, Optional
 from src.utility.Settings import ENCODING, MAX_USERS_PER_CHANNEL, USERNAMES_FILE
 
 
-class Channel:
-    def __init__(self, name: str):
-        self.name = name
-        self.users: List[Dict] = []  # List of {conn, addr, username}
-        self.messages: List[Dict] = []  # Chat History
-
-    def add_user(self, conn, addr, username) -> bool:
-        # Check if channel is full
-        if len(self.users) >= MAX_USERS_PER_CHANNEL:
-            return False
-
-        # Check if user is already in the channel
-        if any(user['username'] == username for user in self.users):
-            return False
-
-        # Add user to channel and inform with message.
-        self.users.append({
-            "conn": conn,
-            "addr": addr,
-            "username": username
-        })
-
-        self.messages.append({
-            "sender": "SERVER",
-            "content": f"{username} has joined the channel."
-        })
-
-        return True
-
-    def remove_user(self, username: str):
-        self.users = [user for user in self.users if ["username"] != username]
-        self.messages.append({
-            "sender": "SERVER",
-            "content": f"{username} has left the channel."
-        })
-
-    def broadcast(self, message: str, sender: str, server):
-
-        # Add message to history
-        self.messages.append({
-            "sender": sender,
-            "content": message
-        })
-
-        # Send to all users except sender
-        for user in self.users:
-            if user["username"] != sender:
-                server.send_message(user["conn"], f"MESSAGE {self.name} {sender} {message}")
-
-    def get_user_list(self) -> List[str]:
-        return [user["username"] for user in self.users]
-
-    def user_in_channel(self, username: str) -> bool:
-        return any(user["username"] == username for user in self.users)
-
-    def get_history(self, limit: int = 50) -> List[Dict]:
-        return self.messages[-limit:]
-
-    def notify_users(self, server, message: str):
-        for user in self.users:
-            server.send_message(user["conn"], message)
-
-
 class Server:
     def __init__(self, port: int, host: str):
         self.port = port
         self.host = host
-        self.channels: Dict[str, Channel] = {}
+        self.users: List[str] = []
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((host, port))
-
-        self.chats = {}  # need to create, {"chat name": [{"conn": conn, "addr": addr, "username": username}]}
-
-        """
-        remain: 
-            1. error handling to client stop connection -> delete client from chats
-            2. start chats from database
-            3. found ip addres of current computer
-        """
+        self.auth = False
 
     def run(self):
         """Main server loop that handles initial connections"""
@@ -115,25 +44,26 @@ class Server:
         try:
             while True:  # Connection lifecycle loop
                 # Wait for auth command
-                auth_result = self.authenticate(conn, addr)
+                auth = self.authenticate(conn, addr)
 
-                if auth_result != 'SIGNIN_SUCCESS':
-                    # We still want to wait for authentication even if exists or wrong credentials
-                    print(f'[DEBUG] - [SERVER/AUTH]: {auth_result}, waiting for new auth request')
-                    continue
-                elif auth_result is None:
-                    conn.close()
-                    return
+                auth_message = auth.get('auth_message')
+                auth_result = auth.get('auth_result')
+
+                print(f'[DEBUG] - [SERVER/AUTH]: {auth_result}, {auth_message}')
+
+                if auth_message == 'SIGNIN_SUCCESS':
+                    self.auth = True
 
                 username = auth_result
 
                 # Start client session
-                try:
-                    self.handle_client_session(conn, addr, username)
-                except ConnectionResetError:
-                    print(f"Client {username} disconnected abruptly")
-                except Exception as e:
-                    print(f"Error in client session for {username}: {e}")
+                if self.auth:
+                    try:
+                        self.handle_client_session(conn, addr, username)
+                    except ConnectionResetError:
+                        print(f"Client {username} disconnected abruptly")
+                    except Exception as e:
+                        print(f"Error in client session for {username}: {e}")
 
                 # Session ended (logout) - loop back to wait for new auth
                 print(f"User {username} logged out")
@@ -164,42 +94,16 @@ class Server:
 
                 action = command[0]
 
-                if action == "create":
-
-                    if len(command) < 2:
-                        self.send_message(conn, "INVALID_CHANNEL_FORMAT")
-                        continue
-
-                    response = self.handle_create_channel(command[1], conn, addr)
-                    self.send_message(conn, response)
-                elif action == 'logout':
+                if action == 'logout':
                     # Clean logout - allows re-authentication
-                    if current_channel:
-                        self.handle_leave_channel(current_channel, username)
+                    self.users.remove(username)
+                    self.auth = False
                     self.send_message(conn, 'LOGOUT_SUCCESS')
+                    # TODO: Need to broadcast new users list to everyone
                     break
-                elif action == "join":
-
-                    if len(command) < 2:
-                        self.send_message(conn, "INVALID_CHANNEL_FORMAT")
-                        continue
-
-                    response = self.handle_join_channel(command[1], username, conn, addr)
-                    if response == "JOIN_SUCCESS":
-                        current_channel = command[1]
-                    self.send_message(conn, response)
-
-                elif action == "leave":
-                    if current_channel:
-                        self.handle_leave_channel(current_channel, username)
-                        current_channel = None
-                        self.send_message(conn, "LEAVE_SUCCESS")
-                    else:
-                        self.send_message(conn, "NOT_IN_CHANNEL")
-
-                elif action == "/quit":
-                    self.send_message(conn, "QUIT_SUCCESS")
-                    break
+                elif action == 'get_users':
+                    users = json.dumps({'action': action, 'data': {'users': self.users}})
+                    self.send_message(conn, users)
 
                 else:  # Treat as message if in channel
                     if current_channel:
@@ -215,12 +119,11 @@ class Server:
         # Cleanup on disconnect
         if current_channel:
             self.handle_leave_channel(current_channel, username)
+
         print(f"Client disconnected: {username} at {addr}")
 
-    def get_channels(self) -> Dict:
-        return self.channels
-
     def broadcast_channel_update(self, action: str, channel_name: str):
+        # Needs to be reworked
         update = {
             "type": "channel_update",
             "action": action,
@@ -235,46 +138,15 @@ class Server:
                 except Exception as e:
                     print(f"Failed to send update to {user['username']}: {e}")
 
-    def handle_create_channel(self, channel_name: str, conn, addr) -> str:
-        if channel_name in self.channels:
-            return "CHANNEL_EXISTS"
+    def broadcast_message(self, message: str):
+        # Needs to be reworked
+        update = {
+            "type": "chat_message",
+            "message": message
+        }
 
-        self.channels[channel_name] = Channel(channel_name)
-        self.broadcast_channel_update("create", channel_name)
-        return "CHANNEL_CREATED_SUCCESS"
 
-    def handle_join_channel(self, channel_name: str, username: str, conn, addr) -> str:
-        # No channel
-        if channel_name not in self.channels:
-            return "NO_SUCH_CHANNEL"
-
-        # Full
-        channel = self.channels[channel_name]
-        if len(channel.users) >= MAX_USERS_PER_CHANNEL:
-            return "CHANNEL_FULL"
-
-        if channel.add_user(conn, addr, username):
-            # Notify other users in the channel
-            channel.broadcast(f"{username} has joined the channel", "SERVER", self)
-            return "JOIN_SUCCESS"
-        return "JOIN_FAILED"
-
-    def handle_leave_channel(self, channel_name: str, username: str) -> str:
-        if channel_name not in self.channels:
-            return "NO_SUCH_CHANNEL"
-
-        channel = self.channels[channel_name]
-        channel.remove_user(username)
-        channel.broadcast(f"{username} has left the channel", "SERVER", self)
-
-        # If channel is empty remove it.
-        if not channel.users:
-            del self.channels[channel_name]
-            self.broadcast_channel_update("delete", channel_name)
-
-        return "LEAVE_SUCCESS"
-
-    def authenticate(self, conn, addr) -> Optional[str]:
+    def authenticate(self, conn, addr) -> Optional[Dict]:
         """Handle user authentication"""
         try:
             data = conn.recv(1024).decode(ENCODING).split()
@@ -292,23 +164,24 @@ class Server:
             if action == "signin":
                 if username in users and users[username] == password:
                     self.send_message(conn, "SIGNIN_SUCCESS")
-                    return username
+                    self.users.append(username)
+                    return {'auth_result': username, 'auth_message': 'SIGNIN_SUCCESS'}
 
                 # Failed to sign in
                 self.send_message(conn, "WRONG_PASSWORD")
-                return "WRONG_PASSWORD"
+                return {'auth_result': None, 'auth_message': 'WRONG_PASSWORD'}
 
             elif action == "signup":
                 if username in users:
                     self.send_message(conn, "USER_EXISTS")
-                    return "USER_EXISTS"
+                    return {'auth_result': None, 'auth_message': 'USER_EXISTS'}
 
                 # Create new user
                 users[username] = password
                 with open(USERNAMES_FILE, 'w') as f:
                     json.dump(users, f)
                 self.send_message(conn, "SIGNUP_SUCCESS")
-                return username
+                return {'auth_result': username, 'auth_message': 'SIGNUP_SUCCESS'}
 
         except Exception as e:
             print(f"Authentication error for {addr}: {e}")

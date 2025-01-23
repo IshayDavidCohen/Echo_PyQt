@@ -8,6 +8,7 @@ SERVER_RESPONSES = ['SIGNIN_SUCCESS', 'SIGNUP_SUCCESS', 'USER_EXISTS', 'WRONG_PA
 class ServerListener(QThread):
     # Define different signals that will be used
     auth_response = pyqtSignal(str)  # Auth responses
+    metadata_response = pyqtSignal(dict)
     channel_update = pyqtSignal(str)  # For channel-related updates
     message_received = pyqtSignal(str, str)  # (channel,message)
     server_error = pyqtSignal(str)  # For error messages
@@ -16,6 +17,7 @@ class ServerListener(QThread):
         super().__init__()
         self.socket = socket
         self.running = True
+        self.EMIT_MAPPER = {'get_users': self.metadata_response}
 
     def run(self):
         self.socket.settimeout(0.5)
@@ -43,7 +45,12 @@ class ServerListener(QThread):
                 # Try JSON for other messages
                 try:
                     update = json.loads(data)
-                    self.handle_server_update(update)
+                    print(f"[DEBUG] ServerListener parsed JSON: {update}")
+                    if update.get('action') in self.EMIT_MAPPER:
+                        self.EMIT_MAPPER[update.get('action')].emit(update.get('data'))
+
+
+                    #self.handle_server_update(update)
                 except json.JSONDecodeError:
                     print(f"[DEBUG] Could not parse as JSON: {data}")
 

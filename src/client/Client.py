@@ -1,11 +1,11 @@
 import sys
 import json
+from typing import List, Dict
 from PyQt5 import uic, QtWidgets
 from PyQt5.QtWidgets import QMessageBox
 
 # App dependencies
-from src.client.CreateChannel import CreateChannelDialog
-from src.client.ChannelManager import ChannelManager, ChannelType
+from src.client.ChannelManager import ChannelType
 from src.client.ClientConnection import ClientConnection
 
 
@@ -42,7 +42,7 @@ class Client(QtWidgets.QMainWindow):
 
         # Checking connection before login
         self._check_connection()
-
+        print("")
         print("[DEBUG] Sending auth request...")  # Debug print
         self.client.send_auth('signin', username, password)
 
@@ -140,36 +140,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.client = credentials_window.client
 
         # Connect client signals
-        self.client.channel_response.connect(self._handle_channel_update)
+        self.client.metadata_response.connect(self.update_users_list)
+        # self.client.channel_response.connect(self._handle_channel_update)
         self.client.message_received.connect(self._handle_message)
         self.client.server_error.connect(self._handle_error)
-
-        # Init Channel Manager
-        self.channel_manager = ChannelManager(self)
 
         # Set username in UI
         self.username_label.setText(f'Welcome,    {username}.')
 
-        # Initialize empty channels list
-        self.channels = []
+        # Get all connected users
+        self.client.get_users()
 
         # Connect UI elements
         self.logout_button.clicked.connect(self.logout)
-        self.create_channel_button.clicked.connect(self.create_channel)
-        self.channel_list.itemDoubleClicked.connect(self.join_channel)
+        # self.create_channel_button.clicked.connect(self.create_channel)
+        # self.channel_list.itemDoubleClicked.connect(self.join_channel)
         self.send_message_button.clicked.connect(self.send_message)
-
-    def create_channel(self):
-        dialog = CreateChannelDialog(self)
-        if dialog.exec_() == QtWidgets.QDialog.Accepted:
-
-            channel_name = dialog.channel_name.text()
-            if channel_name:
-                self.client.create(channel_name)
-
-    def join_channel(self, item):
-        channel_name = item.text()
-        self.client.join_channel(channel_name)
 
     def send_message(self):
         if self.client.current_channel is None:
@@ -180,6 +166,14 @@ class MainWindow(QtWidgets.QMainWindow):
         if message:
             self.client.send_message(message)
             self.message_input.clear()
+
+    def update_users_list(self, users: Dict) -> None:
+        server_res = users.get('users')
+        if server_res is None:
+            server_res = []
+
+        self.users_list.clear()
+        self.users_list.addItems(server_res)
 
     def logout(self):
         # Disconnect ClientConnection

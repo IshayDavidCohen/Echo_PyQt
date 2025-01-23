@@ -9,7 +9,7 @@ from src.utility.Settings import ENCODING
 class ClientConnection(QObject):
     # Define signals for UI updates
     auth_response = pyqtSignal(str)  # For authentication responses
-    channel_response = pyqtSignal(str)  # For channel-related responses
+    metadata_response = pyqtSignal(dict)  # For channel-related responses
     message_received = pyqtSignal(str, str)  # channel, message
     server_error = pyqtSignal(str)  # For error messages
 
@@ -47,10 +47,9 @@ class ClientConnection(QObject):
 
         # Direct connection of signals
         print("[DEBUG] Connecting ServerListener signals...")
-        self.server_listener.auth_response.connect(self.auth_response.emit)
-
-        self.server_listener.channel_update.connect(self._handle_channel_update)
-        self.server_listener.message_received.connect(self._handle_message)
+        self.server_listener.auth_response.connect(self.auth_response)
+        self.server_listener.metadata_response.connect(self.metadata_response)
+        self.server_listener.message_received.connect(self.message_received)
         self.server_listener.server_error.connect(self._handle_server_error)
 
         print("[DEBUG] Starting ServerListener thread...")
@@ -63,17 +62,8 @@ class ClientConnection(QObject):
         auth_message = f"{action} {username} {password}"
         self._send(auth_message)
 
-    def create_channel(self, channel_name: str):
-        """Send channel creation request"""
-        self._send(f"create {channel_name}")
-
-    def join_channel(self, channel_name: str):
-        """Send channel join request"""
-        self._send(f"join {channel_name}")
-
-    def leave_channel(self, channel_name: str):
-        """Send channel leave request"""
-        self._send(f"leave {channel_name}")
+    def get_users(self):
+        self._send("get_users")
 
     def send_message(self, message: str):
         """Send chat message"""
@@ -98,8 +88,8 @@ class ClientConnection(QObject):
             self.server_error.emit(f"Send failed: {str(e)}")
 
     # Signal Handlers
-    def _handle_channel_update(self, data):
-        self.channel_response.emit(data)
+    # def _handle_metadata_update(self, data):
+    #     self.metadata_response.emit(data)
 
     def _handle_message(self, channel, message):
         self.message_received.emit(channel, message)
