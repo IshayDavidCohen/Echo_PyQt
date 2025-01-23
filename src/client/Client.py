@@ -8,6 +8,7 @@ from datetime import datetime
 # App dependencies
 from src.client.ChannelManager import ChannelType
 from src.client.ClientConnection import ClientConnection
+from src.utility.Settings import MAX_USERS_PER_CHANNEL
 
 
 class Client(QtWidgets.QMainWindow):
@@ -43,7 +44,6 @@ class Client(QtWidgets.QMainWindow):
 
         # Checking connection before login
         self._check_connection()
-        print("")
         print("[DEBUG] Sending auth request...")  # Debug print
         self.client.send_auth('signin', username, password)
 
@@ -96,7 +96,8 @@ class Client(QtWidgets.QMainWindow):
                     "USER_EXISTS": "Username already exists!",
                     "WRONG_PASSWORD": "Invalid credentials!",
                     "INVALID_FORMAT": "Invalid username or password format!",
-                    "AUTH_ERROR": "Authentication error occurred!"
+                    "AUTH_ERROR": "Authentication error occurred!",
+                    "MAX_USERS_REACHED": "Maximum users reached!"
                 }
                 QMessageBox.warning(self, 'Error',
                                     error_messages.get(response, "Unknown error occurred!"))
@@ -147,6 +148,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Set username in UI
         self.username_label.setText(f'Welcome,    {username}.')
+        self.max_users_allowed.setText(f'{MAX_USERS_PER_CHANNEL}')
 
         # Get all connected users
         self.client.get_users()
@@ -158,16 +160,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def send_message(self):
         message_time = datetime.now().strftime("%H:%M:%S")
-
         message = self.message_input.text()
+
         if message:
             self._handle_message(message_time, self.username, message)
 
             # Send to server
             self.client.send_message(
-                json.dumps({'time': message_time,
-                            'user': self.username,
-                            'message': message}))
+                json.dumps({'time': message_time, 'user': self.username, 'message': message}))
 
             self.message_input.clear()
 
@@ -176,6 +176,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if server_res is None:
             server_res = []
 
+        self.user_count.setText(f"{len(server_res)}")
         self.users_list.clear()
         self.users_list.addItems(server_res)
 
@@ -197,6 +198,7 @@ class MainWindow(QtWidgets.QMainWindow):
         time = server_payload.get('time')
         sender = server_payload.get('sender')
         message = server_payload.get('message')
+
         if time and sender and message:
             self._handle_message(time, sender, message)
 
@@ -213,6 +215,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _handle_error(self, error: str):
         QMessageBox.critical(self, 'Server Error', error)
+
+    def closeEvent(self, event):
+        self.logout()
+        self.credentials_window.main_window = None
+        super().closeEvent(event)
 
 
 if __name__ == '__main__':
