@@ -189,6 +189,10 @@ class Server:
                 users = json.load(f)
 
             if action == "signin":
+                if len(self.users) >= MAX_USERS_PER_CHANNEL:
+                    self.send_message(conn, "MAX_USERS_REACHED")
+                    return {'auth_result': None, 'auth_message': 'MAX_USERS_REACHED'}
+
                 if username in users and users[username] == password:
                     self.send_message(conn, "SIGNIN_SUCCESS")
                     self.users.append(username)
