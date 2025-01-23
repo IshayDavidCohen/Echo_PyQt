@@ -1,0 +1,19 @@
+{
+    "users": {
+        "nadav": "1234",
+        "admin": "admin"
+    },
+
+    "chats": {
+        "genral": {
+            "nadav": "hello",
+            "bot1": "bi",
+            "1":"1"
+        },
+        "gidon angels": {
+            "nadav": "hello",
+            "bot1": "bi",
+            "1":"1"
+        }
+    }
+}

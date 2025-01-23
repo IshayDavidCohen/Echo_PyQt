@@ -4,7 +4,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, send_message):
         super().__init__()
         # Window configuration
         self.setWindowTitle("Chat Server")
@@ -18,7 +18,7 @@ class MainWindow(QMainWindow):
         self.setLayout(self.vbox)
 
         # Create input 
-        self.input_text = QLineEdit(self)
+        self.input_text = QLineEdit(self) # qtext edit
         self.send_button = QPushButton("Send", self)
                 
         self.initUI() # run initialize screen objects
@@ -43,20 +43,21 @@ class MainWindow(QMainWindow):
         text = self.input_text.text()  # get text
         self.input_text.setText("")  # clear input
         
+        self.add_message(text, "green")
+        send_message(text)
+        
+        
+    def add_message(self, text, color):
         # Create label message and add to vbox
         label = QLabel(text, self) 
-        label.setStyleSheet("color: black; font-famliy: Arial; font-size: 25px;")
+        label.setStyleSheet(f"color: {color}; font-famliy: Arial; font-size: 25px;")
         self.vbox.addWidget(label)
-             
     
-def main():
+    
+        
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     screen = app.primaryScreen()
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
-        
-   
-if __name__ == "__main__":
-    main()
-    print(111)
