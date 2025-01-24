@@ -46,7 +46,7 @@ Real-time multi-client chat application built with PyQt5 and socket programming.
 ### Installation
 ```bash
 git clone https://github.com/IshayDavidCohen/Echo_PyQt.git
-cd echo
+cd Echo_PyQt
 pip install -r requirements.txt
 ```
 
