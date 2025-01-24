@@ -3,7 +3,7 @@ import json
 from PyQt5.QtCore import QThread, pyqtSignal
 
 SERVER_RESPONSES = ['SIGNIN_SUCCESS', 'SIGNUP_SUCCESS', 'USER_EXISTS',
-                    'WRONG_PASSWORD', 'WRONG_PASSWORD', 'NOT_IN_CHANNEL', 'MAX_USERS_REACHED']
+                    'WRONG_PASSWORD', 'WRONG_PASSWORD', 'NOT_IN_CHANNEL', 'MAX_USERS_REACHED', 'USER_LOGGED_IN']
 
 
 class ServerListener(QThread):

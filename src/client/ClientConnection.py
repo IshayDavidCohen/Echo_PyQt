@@ -75,7 +75,6 @@ class ClientConnection(QObject):
             self.server_listener.stop()
         if self.socket:
             try:
-                self._send("/quit")
                 self.socket.close()
             except:
                 pass
@@ -83,8 +82,10 @@ class ClientConnection(QObject):
     def _send(self, message: str):
         """Internal method to send messages to server"""
         try:
+            print(f"[DEBUG] Socket state before send: {self.socket}")
             self.socket.sendall(message.encode(ENCODING))
         except Exception as e:
+            print(f"[DEBUG] Send error state: {e}")
             self.server_error.emit(f"Send failed: {str(e)}")
 
     def _handle_server_error(self, error):

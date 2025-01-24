@@ -97,7 +97,8 @@ class Client(QtWidgets.QMainWindow):
                     "WRONG_PASSWORD": "Invalid credentials!",
                     "INVALID_FORMAT": "Invalid username or password format!",
                     "AUTH_ERROR": "Authentication error occurred!",
-                    "MAX_USERS_REACHED": "Maximum users reached!"
+                    "MAX_USERS_REACHED": "Maximum users reached!",
+                    "USER_LOGGED_IN": "User already logged in!"
                 }
                 QMessageBox.warning(self, 'Error',
                                     error_messages.get(response, "Unknown error occurred!"))

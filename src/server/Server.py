@@ -1,10 +1,9 @@
-import sys
+import time
 import json
 import socket
 import threading
 
 from typing import Dict, List, Optional
-from datetime import datetime
 
 # App Dependencies
 from src.utility.Settings import ENCODING, MAX_USERS_PER_CHANNEL, USERNAMES_FILE
@@ -56,6 +55,8 @@ class Server:
             while True:  # Connection lifecycle loop
                 # Wait for auth command
                 auth = self.authenticate(conn, addr)
+                if auth is None:
+                    continue
 
                 auth_message = auth.get('auth_message')
                 auth_result = auth.get('auth_result')
@@ -118,16 +119,16 @@ class Server:
 
                 if action == 'logout':
                     # Clean logout - allows re-authentication
-                    self.users.remove(username)
                     self.auth = False
+                    self.users.remove(username)
                     self.send_message(conn, 'LOGOUT_SUCCESS')
+                    time.sleep(0.1)
                     self.broadcast_users_update()
                     break
 
                 elif action == 'get_users':
                     users = json.dumps({'action': action, 'data': {'users': self.users}})
                     self.send_message(conn, users)
-
                 else:  # Treat as message
                     self.broadcast_message(
                         time=data.get('time'),
@@ -194,10 +195,13 @@ class Server:
                     return {'auth_result': None, 'auth_message': 'MAX_USERS_REACHED'}
 
                 if username in users and users[username] == password:
+                    if username in self.users:
+                        self.send_message(conn, "USER_LOGGED_IN")
+                        return {'auth_result': None, 'auth_message': 'USER_LOGGED_IN'}
+
                     self.send_message(conn, "SIGNIN_SUCCESS")
                     self.users.append(username)
                     self.broadcast_users_update()
-
                     return {'auth_result': username, 'auth_message': 'SIGNIN_SUCCESS'}
 
                 # Failed to sign in
