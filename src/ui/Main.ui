@@ -111,7 +111,7 @@ p, li { white-space: pre-wrap; }
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../../../../Downloads/send_image.png</normaloff>../../../../../../../../Downloads/send_image.png</iconset>
+      <normaloff>../resources/send_image.png</normaloff>../resources/send_image.png</iconset>
     </property>
     <property name="iconSize">
      <size>
@@ -143,7 +143,7 @@ p, li { white-space: pre-wrap; }
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../../../../Downloads/disconnect.png</normaloff>../../../../../../../../Downloads/disconnect.png</iconset>
+      <normaloff>../resources/disconnect.png</normaloff>../resources/disconnect.png</iconset>
     </property>
     <property name="iconSize">
      <size>
