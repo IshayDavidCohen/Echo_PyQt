@@ -5,12 +5,6 @@ import threading
 from time import sleep
 
 """
-1. save messages in server and update databse ince in while or in the end
-3. clean code...
-4. comments
-"""
-
-"""
 Format of data move between server and client: 
     {
         "status": "success"/"fail", 
@@ -25,7 +19,6 @@ Format of data move between server and client:
     }
 
 """
-
 
 class Server():
     def __init__(self, port, host):
@@ -96,9 +89,8 @@ class Server():
     def broadcast(self, name, type_, message, chat):
         for user in self.chats_users[chat]:
             if user["username"] != name:
-                print(f" send --{name}:{message}-- to", user["username"])
                 self.send(user["conn"], user["addr"], "success", type_, {"name": name, "message": message}, chat)
-    
+
     
     def remove_user_from_chat(self, addr, chat):
         if not chat:
@@ -111,6 +103,8 @@ class Server():
                 self.chats_users[chat].pop(i)
                 break
             
+        print(f"[{username} Left chat: {chat}]")    
+           
         # send user disconnected from chat
         self.broadcast(username, "user leave", f"{username} DISCONNECT FROM CHAT", chat)
     
@@ -149,12 +143,13 @@ class Server():
     def handleUser(self, conn, addr, chat, username):
         # Send messge to all users in chat that new user join
         self.broadcast(username, "new user", f"{username} CONNECT TO CHAT", chat)
+        print(f"[{username} Joined chat: {chat}]")    
         
         # Send message history to user
-        #self.send_history(conn, addr, chat)
+        self.send_history(conn, addr, chat)
         
         while True:
-            status, type_, data = self.recev(conn, addr)
+            status, type_, data = self.recev(conn, addr, chat)
             if status == 'fail': break # client left
                 
             name, message = data["name"], data["message"]

@@ -8,10 +8,11 @@ ui_file = "chat.ui"
 class MainWindow(QMainWindow):
     def __init__(self, client):
         super(MainWindow, self).__init__()
-        loadUi(ui_file, self)  # Load the .ui file
         
+        loadUi(ui_file, self)  # Load the .ui file
+        self.setWindowTitle("Chat Server")
+
         self.client = client  # Store reference to Client
-        self.chat_name = None
 
         self.initialize_widgets()
         self.set_widget_style()
@@ -25,9 +26,7 @@ class MainWindow(QMainWindow):
         self.send_message_button.clicked.connect(self.send_message)  # Connect button to function
         current_geometry = self.send_message_button.geometry()  # Get current geometry
         self.send_message_button.setGeometry(550, 342, 80, 40)  # (x, y, width, height)        
-        
-        self.username_label.setText(self.chat_name)  # Set the username label text
-        
+                
         current_geometry = self.message_input.geometry()  # Get current geometry
         self.message_input.setGeometry(current_geometry.x(), current_geometry.y(), current_geometry.width() - 30, 50) # change hight to 75px
         self.message_input.setPlaceholderText("Type your message here...")  # Add placeholder text
@@ -72,23 +71,26 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # Style for the username_label
-        self.username_label.setStyleSheet("""
-            QLabel {
-                font-size: 20px; 
-                font-weight: bold; 
-                color: red; 
-            }
-        """)
 
-
-    def display_message(self, message, name=None):
+    def display_message(self, type_, message, name=None):
         current_chat = self.chat_display.toHtml()  # Preserve existing chat
+        new_message = None
         
-        new_message = f"<p>{name}: {message}</p>"
-        if not name: new_message = f"<p><b>You:</b> {message}</p>"
+        if type_ == "me":
+            new_message = f"<p><b>You:</b> {message}</p>"
+            
+        elif type_ == "new user":
+           new_message = f"<p style='color: green;'>{message}</p>"
+           
+        elif type_ == "user leave":
+            new_message = f"<p style='color: red;'>{message}</p>"
+             
+        else:
+            new_message = f"<p>{name}: {message}</p>"
         
         self.chat_display.setHtml(current_chat + new_message)
+        
+        self.chat_display.moveCursor(self.chat_display.textCursor().End)# Automatically scroll to the bottom
         self.message_input.clear()  # Clear the message input field
 
 
@@ -97,12 +99,12 @@ class MainWindow(QMainWindow):
         message = self.message_input.toPlainText().strip()
         
         if message:  # If there is a message, update the chat display
-            self.display_message(message)
+            self.display_message("me", message)
             self.client.send_message_to_server(message)
     
     
-    def set_chat_name(self, name):
-        self.chat_name = name
+    def set_chat_name(self, chat_name):
+        self.setWindowTitle(f"Chat: {chat_name}")  # Update the window title
 
 
 if __name__ == "__main__":
