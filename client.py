@@ -1,17 +1,17 @@
+from PyQt5.QtCore import QObject, pyqtSignal, QThread
+from PyQt5.QtWidgets import QApplication
 import socket
 import threading
 import json
 from window import MainWindow
-from PyQt5.QtWidgets import QApplication
 import sys
 
-"""
-4. clean code and comments
-"""
-
-
-class Client():
+class Client(QObject):
+    # Signal to emit messages to the GUI
+    message_received = pyqtSignal(str, str)
+    
     def __init__(self, port, server_ip):
+        super(Client, self).__init__()
         self.port = port
         self.server_ip = server_ip
 
@@ -24,25 +24,30 @@ class Client():
         self.screen = self.app.primaryScreen()
         self.window = MainWindow(self)
      
+        # Connect the signal to the window's display_message method
+        self.message_received.connect(self.window.display_message)
+         
          
     def recev(self):
         try:
             data_string = self.socket.recv(2048).decode('utf-8')
-            if not data_string: raise 
+            if not data_string: raise Exception("Disconnected") 
             
             data = json.loads(data_string)
             print("recev", data)
             return data["status"], data["type"], data["data"]
-        except:
-            print(f"[connection lost...]")
+        
+        except Exception as e:
+            print(f"[Connection lost: {e}]")
 
     
     def send(self, status, type_, data):
         try:
             messeage = json.dumps({"status": status, "type":type_, "data": data})
             self.socket.send(messeage.encode('utf-8'))
-        except : 
-            print(f"[connection lost...]")
+            
+        except Exception as e:
+            print(f"[Connection lost: {e}]")
 
 
     def authentication(self):
@@ -95,7 +100,8 @@ class Client():
         while True:
             status, type_, data = self.recev()
             if type_ == "message":
-                self.window.display_message(data['message'], data['name'])
+                # Emit the message to the main thread
+                self.message_received.emit(data['message'], data['name'])
 
 
     def send_message_to_server(self, text):
@@ -112,14 +118,15 @@ class Client():
         chat_name = self.pick_chat(chats)
         print("Conncet to chat: ", chat_name)
               
-        # Handle chat history
-        self.get_chat_history()
+        # Handle get chat history
+        #self.get_chat_history()
 
-        # Start thread of listening to messages
-        thread = threading.Thread(target=self.listen_to_message, args=())
-        thread.start()
+        # Start a thread for listening to messages
+        self.listen_thread = QThread()
+        self.listen_thread.run = self.listen_to_message
+        self.listen_thread.start()
         
-        # Init GUI   
+        # Show GUI   
         self.window.set_chat_name(chat_name)
         self.window.show()
         sys.exit(self.app.exec_())

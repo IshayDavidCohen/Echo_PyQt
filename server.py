@@ -151,7 +151,7 @@ class Server():
         self.broadcast(username, "new user", f"{username} CONNECT TO CHAT", chat)
         
         # Send message history to user
-        self.send_history(conn, addr, chat)
+        #self.send_history(conn, addr, chat)
         
         while True:
             status, type_, data = self.recev(conn, addr)
