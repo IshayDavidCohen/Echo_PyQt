@@ -1,5 +1,1 @@
-{
-    "users": 
-        {
-            "nadav": "1234", "admin": "admin", "ofek": "4321", "user1": "user1", "user2": "user2"}, 
-            "chats": {"General": [["nadav", "hi"], ["ofek", "hello"]], "talking math": [["nadav", "1+2+3=?"], ["ofek", "6"], ["admin", "5*5=?"], ["admin", "hii"], ["user2", "hello"], ["user1", "bye"]], "Data science": []}}
+{"users": {"nadav": "1234", "admin": "admin", "ofek": "4321", "user1": "user1", "user2": "user2"}, "chats": {"General": [["nadav", "hi"], ["ofek", "hello"]], "talking math": [["nadav", "1+2+3=?"], ["ofek", "6"], ["admin", "5*5=?"], ["admin", "hii"], ["user2", "hello"], ["user1", "bye"]], "Data science": []}}

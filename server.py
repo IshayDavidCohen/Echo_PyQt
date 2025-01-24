@@ -110,10 +110,16 @@ class Server():
     
 
     def checkValidUser(self, username, password):
+        # chack username is not already connect
+        for users in self.chats_users.values():
+            for user in users:
+                if user["username"] == username:
+                    return False
+        
+        # Reuturn if username and password in users database.
         with open('./database.json', 'r') as file:
             database = json.load(file)
             
-            # Reuturn if username and password in users database.
             if username in database["users"].keys():
                 return database["users"][username] == password
             
