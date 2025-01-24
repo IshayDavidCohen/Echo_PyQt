@@ -65,11 +65,6 @@ class Client(QtWidgets.QMainWindow):
         self.main_window.show()
         self.hide()
 
-    def closeEvent(self, event):
-        """Handle window close"""
-        self.client.disconnect()
-        event.accept()
-
     # Private functions and signal handlers
     def _handle_auth_response(self, response: str):
         """Handle authentication responses from server"""
@@ -220,7 +215,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         self.logout()
         self.credentials_window.main_window = None
-        super().closeEvent(event)
 
 
 if __name__ == '__main__':
