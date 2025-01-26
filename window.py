@@ -14,8 +14,8 @@ class MainWindow(QMainWindow):
 
         self.client = client  # Store reference to Client
 
-        self.initialize_widgets()
-        self.set_widget_style()
+        self.initialize_widgets()  # Setting for componnets
+        self.set_widget_style()  # Setting componnets style
         
         
     def initialize_widgets(self):
@@ -23,12 +23,11 @@ class MainWindow(QMainWindow):
         self.chat_display.clear() # Clear any pre-existing text in the chat display
         
         self.send_message_button.setText("Send") # set text in button to 'send'
-        self.send_message_button.clicked.connect(self.send_message)  # Connect button to function
-        current_geometry = self.send_message_button.geometry()  # Get current geometry
+        self.send_message_button.clicked.connect(self.send_message)  # Connect button to function send_meesage
         self.send_message_button.setGeometry(550, 342, 80, 40)  # (x, y, width, height)        
                 
-        current_geometry = self.message_input.geometry()  # Get current geometry
-        self.message_input.setGeometry(current_geometry.x(), current_geometry.y(), current_geometry.width() - 30, 50) # change hight to 75px
+        current_geometry = self.message_input.geometry()  # Get current size and index of componnets
+        self.message_input.setGeometry(current_geometry.x(), current_geometry.y(), current_geometry.width() - 30, 50) # change hight and width
         self.message_input.setPlaceholderText("Type your message here...")  # Add placeholder text
 
 
@@ -73,7 +72,7 @@ class MainWindow(QMainWindow):
 
 
     def display_message(self, type_, message, name=None):
-        current_chat = self.chat_display.toHtml()  # Preserve existing chat
+        current_chat = self.chat_display.toHtml()  # Get existing chat as Html
         new_message = None
         
         if type_ == "me":
@@ -90,7 +89,7 @@ class MainWindow(QMainWindow):
         
         self.chat_display.setHtml(current_chat + new_message)
         
-        self.chat_display.moveCursor(self.chat_display.textCursor().End)# Automatically scroll to the bottom
+        self.chat_display.moveCursor(self.chat_display.textCursor().End) # Automatically scroll to the bottom of the window
         self.message_input.clear()  # Clear the message input field
 
 
@@ -98,12 +97,13 @@ class MainWindow(QMainWindow):
         # Get the text from the message input field
         message = self.message_input.toPlainText().strip()
         
-        if message:  # If there is a message, update the chat display
-            self.display_message("me", message)
-            self.client.send_message_to_server(message)
+        if message:  # If there is a message 
+            self.display_message("me", message)  # Update the chat display
+            self.client.send_message_to_server(message)  # Send message to server using client object
     
     
-    def set_chat_name(self, chat_name):
+    def set_window_name(self, chat_name):
+        # set window name to new name, client is calling that function
         self.setWindowTitle(f"Chat: {chat_name}")  # Update the window title
 
 
